@@ -92,7 +92,7 @@ def survival_stats(data, key, filters = []):
         nonsurv_vals = all_data[all_data['Survived'] == 0][key].reset_index(drop = True)
         surv_vals = all_data[all_data['Survived'] == 1][key].reset_index(drop = True)
         plt.hist(nonsurv_vals, bins = bins, alpha = 0.6,
-                 color = 'red', label = 'Did not survive')
+                 color = 'red', label = 'Not survived')
         plt.hist(surv_vals, bins = bins, alpha = 0.6,
                  color = 'green', label = 'Survived')
     
@@ -129,18 +129,18 @@ def survival_stats(data, key, filters = []):
             surv_bar = plt.bar(i, frame.loc[i]['Survived'], width = bar_width, color = 'g')
 
             plt.xticks(np.arange(len(frame)), values)
-            plt.legend((nonsurv_bar[0], surv_bar[0]),('Did not survive', 'Survived'), framealpha = 0.8)
+            plt.legend((nonsurv_bar[0], surv_bar[0]),('Not Survived', 'Survived'), framealpha = 0.8)
 
     # Common attributes for plot formatting
     plt.xlabel(key)
     plt.ylabel('Number of Passengers')
-    plt.title('Passenger Survival Statistics With \'%s\' Feature'%(key))
+    plt.title('Passenger Survival Statistics by \'%s\' Feature'%(key))
     plt.show()
 
     # Report number of passengers with missing values
     if sum(pd.isnull(all_data[key])):
         nan_outcomes = all_data[pd.isnull(all_data[key])]['Survived']
-        print "Passengers with missing '{}' values: {} ({} survived, {} did not survive)".format( \
+        print "Passengers with missing '{}' values: {} ({} Survived, {} Not Survived)".format( \
               key, len(nan_outcomes), sum(nan_outcomes == 1), sum(nan_outcomes == 0))
 
 def plot_survival_rate(data, key, feature):
@@ -148,5 +148,4 @@ def plot_survival_rate(data, key, feature):
     facet.map(sns.kdeplot,feature,shade= True)
     facet.set(xlim=(0, data[feature].max()))
     facet.add_legend()
-    plt.legend(loc='upper right')
-    facet.set(title='{} Probability Density of {}'.format(key, feature), ylabel='{} Probability'.format(key))
+    facet.set(title='Probability Density of {} by {}'.format(feature, key), ylabel='Probability Density')
