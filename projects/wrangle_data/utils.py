@@ -14,13 +14,13 @@ The process for this transformation is as follows:
 - Write each data structure to the appropriate .csv files
 
 We've already provided the code needed to load the data, perform iterative parsing and write the
-output to csv files. 
+output to csv files.
 
 Your task is to complete the shape_element function that will transform each
-element into the correct format. 
+element into the correct format.
 
 To make this process easier we've already defined a schema (see
-the schema.py file in the last code tab) for the .csv files and the eventual tables. Using the 
+the schema.py file in the last code tab) for the .csv files and the eventual tables. Using the
 cerberus library we can validate the output against this schema to ensure it is correct.
 
 ## Shape Element Function
@@ -199,7 +199,7 @@ PHONE_AC = '10'
 PHONE_LANDLINE = 8
 
 phone_re = re.compile(r'\D*(?P<cc>%s)?\D*(?P<ac>%s|%s)?\D*(?P<lc>\d{8,})' % (PHONE_AC, r'0'+PHONE_AC, PHONE_AC))
-    
+
 def format_phonenumber(pn):
     '''
     Return formatted phone number, marked with 'N/A' if it's invalid.
@@ -219,7 +219,7 @@ def format_phonenumber(pn):
     # landline, add area code
     else:
         return '+{}-{}{}'.format(PHONE_CC, PHONE_AC, lc)
-    
+
 def update_phone(phone):
     '''
     Update phone entry with uniformed format.
@@ -261,7 +261,7 @@ def validate_element(element, validator, schema=SCHEMA):
         field, errors = next(validator.errors.iteritems())
         message_string = "\nElement of type '{0}' has the following errors:\n{1}"
         error_string = pprint.pformat(errors)
-        
+
         raise Exception(message_string.format(field, error_string))
 
 def audit_element(element):
@@ -278,14 +278,14 @@ def audit_element(element):
             continue
         # audit phone
         if k == 'phone':
-            t['value'] = updaet_phone(t['value'])
+            t['value'] = update_phone(t['value'])
         # audit address
         if (t['type'] == 'addr' and k == 'street') or k == 'en':
-            t['value'] = updaet_address(t['value'])
+            t['value'] = update_address(t['value'])
         r.append(t)
     return r
-        
-        
+
+
 def shape_element(element, node_attr_fields=NODE_FIELDS, way_attr_fields=WAY_FIELDS,
                   problem_chars=PROBLEMCHARS, default_tag_type='regular'):
     """Clean and shape node or way XML element to Python dict"""
@@ -294,7 +294,7 @@ def shape_element(element, node_attr_fields=NODE_FIELDS, way_attr_fields=WAY_FIE
     way_attribs = {}
     way_nodes = []
     tags = []  # Handle secondary tags the same way for both node and way elements
-    
+
     # YOUR CODE HERE
     element_id = element.get('id')
     if element.tag == 'node':
@@ -310,7 +310,7 @@ def shape_element(element, node_attr_fields=NODE_FIELDS, way_attr_fields=WAY_FIE
                        'tag': ['k', 'v']}
         attribs = get_element_attribs(element, attrib_dict)
         return {'way': attribs['way'][0],
-                'way_nodes': [{'id': element_id, 'node_id': nd['ref'], 'position':i} 
+                'way_nodes': [{'id': element_id, 'node_id': nd['ref'], 'position':i}
                               for i, nd in enumerate(attribs['nd'])],
                 'way_tags': get_tags(element_id, attribs['tag'], default_tag_type)}
 
@@ -375,8 +375,8 @@ class UnicodeDictWriter(csv.DictWriter, object):
 # ================================================== #
 def get_sample(osm_file, sample_file, k=10):
     '''
-    Take a systematic sample of elements from your original OSM region. 
-    Try changing the value of k so that your resulting SAMPLE_FILE ends up at different sizes. 
+    Take a systematic sample of elements from your original OSM region.
+    Try changing the value of k so that your resulting SAMPLE_FILE ends up at different sizes.
     When starting out, try using a larger k, then move on to an intermediate k before processing your whole dataset.
     '''
     with open(sample_file, 'wb') as output:
@@ -389,8 +389,8 @@ def get_sample(osm_file, sample_file, k=10):
                 output.write(ET.tostring(element, encoding='utf-8'))
 
         output.write('</osm>')
-        
-        
+
+
 def process_map(file_in, validate=False, audit=False):
     """Iteratively process each XML element and write to csv(s)"""
 
