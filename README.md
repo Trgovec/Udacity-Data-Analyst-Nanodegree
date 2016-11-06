@@ -8,9 +8,9 @@
 Section | Project | Topics | Status
 --- | --- | --- | ---
 Exploratory Project | [Analyze Bay Area Bike Share Data](./projects/bike_sharing) | intro to basic data wrange and visualization techniques | Done
-Test a Perceptual Phenomenon | [Test a Perceptual Phenomenon](./projects/stroop_test) | - | -
-Investigate a Dataset | [Investigate a Dataset](./projects/investigate_dataset) | - | -
-Wrangle OpenStreetMap Data | [Wrangle OpenStreetMap Data](./projects/wrangle_data) | - | -
+Test a Perceptual Phenomenon | [Test a Perceptual Phenomenon](./projects/stroop_test) | use descriptive statistics and a statistical test to analyze the Stroop effect, a classic result of experimental psychology | Done
+Investigate a Dataset | [Investigate a Dataset](./projects/investigate_dataset) | investigate titanic dataset using `numpy`, `pandas` and basic machine learning | Done
+Wrangle OpenStreetMap Data | [Wrangle OpenStreetMap Data](./projects/wrangle_data) | Parse, audit, manupulate, and investigate the OpenStreetMap data using `XML`, `CVS` and `SQL` | Done
 Explore and Summarize Data | [Explore and Summarize Data](./projects/explore_data) | - | -
 Identify Fraud from Enron Email | [Identify Fraud from Enron Email](./projects/investigate_dataset) | - | -
 Make Effective Data Visualization | [Make Effective Data Visualization](./projects/data_viz) | - | - 
