@@ -1,0 +1,615 @@
+---
+title: "2016 US Presidental Campaign Financial Contributions Data Exploration"
+author: "Neo Xing"
+date: "11/10/2016"
+---
+
+## Introduction
+In this project, we will explore the financial contributions to 2016 US Presidential candidates of California (CA).
+We try to unconver the statistics in contribution data, as well as its relationship with the community background and election result of CA.
+
+1M contributions
+25 candidates
+58 counties
+2+ years
+
+
+- [Data Set Options](https://docs.google.com/document/d/1qEcwltBMlRYZT-l699-71TzInWfk4W9q5rTCSvDVMpc/pub?embedded=true)
+- [Financial Contributions to Presidential Campaigns by State](http://fec.gov/disclosurep/pnational.do)
+- [Wikipedia](https://en.wikipedia.org/wiki/Republican_Party_presidential_candidates,_2016)
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# load library
+library(ggplot2)
+library(knitr)
+library(tidyr)
+library(dplyr)
+library(reshape)
+library(stringr)    # str_to_title
+library(tidyverse)  # parse_integer
+library(noncensus)  # city and county data
+library(gridExtra)
+
+set.seed(42)
+```
+
+## Data Wrangling
+In this section, we audit, clean and manupulate data for later exploration. 
+Data will be firstly loaded and preprocessed sperately, then several dataframes will be built and used in the following sections.
+
+```{r}
+## list data
+system('du -sh data/* | cat -n')
+```
+
+### Data Preprocess
+We will load and take glimps of the data rows. 
+After it the data will be preprocessed by dropping unused part, renaming columns, covnertting data types, and formatting.
+
+
+#### Financial contribution data
+
+##### Data structure
+```{r set-options}
+# skip header as there's an extra `,` at end of each line
+contributions <- read.csv('data/ca_contributions.csv', header=F, na.strings="N/A")
+head(contributions)
+```
+```{r}
+str(contributions)
+```
+
+##### Data cleaning
+1. drop unused data
+  - only keep `candidate name, contribution city, zip, amount, date, contributor's employer and occupation`
+  - rename column names for consistence of all dataframes
+2. modify data type
+  - `date` from string to date
+  - `amount` and `zip` to numbers
+  - formats of `city`, `candidate`, `employer`, `occupation`
+3. auditing
+  - check for invalid values such as `N/A`
+
+- load and preprocess data
+```{r}
+# drop header row and unused columns
+contributions <- contributions[c(-1),c(3, 5, 6, 7, 8, 9, 10, 11)]
+# rename columns
+colnames(contributions) <- c('candidate', 'city', 'state', 'zip', 'employer', 'occupation', 'amount', 'date')
+# convert zip code to 5 digits integer
+contributions$zip <- as.integer(substr(contributions$zip, 1, 5))
+# convert amount to numeric value
+contributions$amount <- as.numeric(as.character(contributions$amount))
+# convert date
+contributions$date <- as.Date(contributions$date, '%d-%b-%y')
+# convert city name to capitalized format
+contributions$city <- str_to_title(contributions$city)
+# convert candidate name to first name only
+contributions <- extract(contributions, candidate, c('candidate'), '(^.*),.*')
+# convert occupation to lower case
+contributions$occupation <- tolower(contributions$occupation)
+# convert employer to capitalized format
+contributions$employer <- str_to_title(contributions$employer)
+```
+
+- check state equals to CA
+```{r}
+# check state equals to CA
+subset(contributions, state != 'CA')
+# is so we can drop it
+contributions$state <- NULL
+```
+
+- check number of N/A in each columns
+```{r}
+# check number of N/A each columns
+apply(apply(contributions, 2, is.na), 2, sum)
+```
+- for `employer` and `occupation`, we only care the top ranks, so `N/A` will simply be ignored
+
+
+#### Average family income by county
+We will use the family income data to gain more background of the contributors and voters in CA. The data comes from national census 2014.
+The preprocessing following similar steps as contribution data.
+
+##### Data structure
+```{r}
+## load and merge average family income to counties
+income = read.csv('data/ca_family_income.csv')
+str(income)
+```
+##### Data cleaning
+- drop unused columns except for `county` name and `family_income`
+- convert income to numeric value
+
+```{r}
+income = income[c('GCT_STUB.display.label.1', 'HC01')]
+colnames(income) <- c('county', 'family_income')
+# drop first row as it's actually sub header
+income <- income[-c(1, 2), ]
+# convert to numeric types
+income$family_income <- as.numeric(as.character(income$family_income))
+
+# convert column name `XX County` to `XX`
+income$county <- sub(x=income$county, pattern=' County', replacement='', ignore.case=T)
+```
+
+#### Votes of presendtial election
+##### Data structure
+```{r}
+## load and merge average family income to counties
+votes = read.csv('data/ca_votes.csv')
+str(votes)
+```
+
+##### Data cleaning
+- drop unused columns except for `county` name and votes for `Clinton` and votes for `Trump`
+- convert votes to integers
+
+```{r}
+colnames(votes) <- c('county', 'Clinton', 'Trump', 'report')
+votes$report <- NULL
+# convert votes
+votes[c('Clinton', 'Trump')] <- apply(votes[c('Clinton', 'Trump')], 2, parse_number)
+# convert county to character
+votes$county <- as.character(votes$county)
+```
+
+
+#### Presendential Candidates
+- the candidates data has been preprocessed
+```{r}
+## load and merge average family income to counties
+candidates = read.csv('data/candidates.csv')
+str(candidates)
+```
+- convert items to character type
+```{r}
+# convert 
+candidates[c(1:3)] <- apply(candidates, 2, as.character)
+candidates
+```
+
+#### City and County Data
+- we need them to map city name or zip to county
+- the population by county will be useful
+```{r}
+## load cities by zip code and couties by fips code of CA
+data(zip_codes)
+data(counties)
+summary(zip_codes); summary(counties);
+```
+
+
+```{r}
+# only keep CA data
+zip_codes <- subset(zip_codes, state=='CA')
+# compute fips -- unique id for county
+zip_codes$fips <-  as.numeric(as.character(zip_codes$fips))
+# convert zip codes to integer
+zip_codes$zip <- as.integer(zip_codes$zip)
+
+counties <- subset(counties, state=='CA')
+# fips = 1000 * state fips + county_fips
+counties$fips <- as.numeric(as.character(counties$state_fips)) * 1000 + 
+  as.numeric(as.character(counties$county_fips))
+
+# change county column name
+colnames(counties)[[1]] <- 'county'
+# convert column name `XX County` to `XX`
+counties$county <- sub(x=counties$county, pattern=' County', replacement='', ignore.case=T)
+```
+
+### Data Manupulation
+#### Merge dataframes `income`, `counties` to `votes`
+
+```{r}
+votes <- merge(votes, income, by='county')
+votes <- left_join(votes, select(counties, county, population), by='county')
+summary(votes);
+```
+
+```{r}
+votes
+```
+
+#### Map zip_codes/city to county
+```{r}
+# merge counties to zip_codes on fips
+zip_codes <- merge(zip_codes[, c('zip', 'city', 'fips')], counties[, c('county', 'fips')], by='fips')
+# drop_fips
+zip_codes$fips <- NULL
+head(zip_codes)
+```
+
+#### Map contribution city to county
+##### Audit
+- we can use zip code or city name for the mapping between `zip_codes` and `contributions`
+- There are four types of error about columns `county_by_zip` and `county_by_city`
+  1. Only `county_by_zip` is `NA`, then we believe it's valid and will fix `city` by looking up the right `zip` in `zip_codes`
+  2. Only `county_by_city` is valid, similar to type 1
+  3. Both columns are not `NA`, then we lack the information about the truth, we will keep the rows except for statistics when county is involved
+  4. Both columns are `NA`, it should be dropped as invalid data
+  
+```{r}
+# look up county in zip_codes table using zip code
+contributions$county_by_zip <- with(zip_codes, county[match(contributions$zip, zip)])
+# look up county in zip_codes table using city name
+contributions$county_by_city <- with(zip_codes, county[match(contributions$city, city)])
+# get the subset that two county columns mismatch, or both are invalid
+contributions.county_error <- subset(contributions, is.na(county_by_zip) | is.na(county_by_city) | county_by_zip != county_by_city)
+head(contributions.county_error, 10);
+```
+
+- Total error number of county entry
+```{r}
+nrow(contributions.county_error); 
+```
+
+- Number of conflicting county entry
+```{r}
+# subset of conflicting county columns
+contributions.county_conflicting <- subset(contributions.county_error, !is.na(county_by_zip) & !is.na(county_by_city))
+nrow(contributions.county_conflicting)
+```
+- Number of invalid county entry
+```{r}
+# subset of invalid county columns
+contributions.county_invalid <- subset(contributions.county_error, is.na(county_by_zip) & is.na(county_by_city))
+nrow(contributions.county_invalid)
+```
+
+##### Cleaning Contribution
+- We refer zip_codes as the standard data source, and will try to indentify and fix errors in county column of countributions table by combining two county columns.
+- Try to fix the first two types of error
+```{r}
+rowf <- function(a, b) {
+  if (is.na(a)) {
+    return(b)
+  }
+  else if (!is.na(b) & (a != b)) {
+    return(NA)
+  }
+  else {
+    return(a)
+  }
+}
+rowf_v <- Vectorize(rowf)
+contributions$county <- rowf_v(contributions$county_by_zip, contributions$county_by_city)
+
+```
+
+- final number of invalid county entries
+```{r}
+nrow(subset(contributions, is.na(county)))
+```
+- invalid county entries examples
+```{r}
+subset(contributions, is.na(county))
+```
+
+- drop unused columns
+
+```{r}
+# drop city and zip
+contributions$city <- contributions$zip <- NULL
+# drop other county columns
+contributions$county_by_city <- contributions$county_by_zip <- NULL
+```
+
+#### Merge candidates, votes to contributions
+- This is possible as dataset is not very large, otherwise, it should be stored in several tables as SQL database.
+
+##### add party of contributions
+```{r}
+# add party of candiadte
+# contributions$party <- with(candidates, party[match(contributions$candidate, candidate)])
+# or
+contributions <- left_join(contributions, select(candidates, candidate, party), by='candidate')
+```
+
+##### add votes to contributions
+```{r}
+#contributions <- left_join(contributions, votes, by='county')
+```
+
+### Data Overview
+#### Dataframe contributions
+- `contributions` is the single dataframe for exploration 
+```{r}
+head(contributions)
+```
+
+```{r}
+summary(contributions)
+```
+
+- check number of N/A in each columns
+```{r}
+# check number of N/A each columns
+apply(apply(contributions, 2, is.na), 2, sum)
+```
+
+#### Cleanup workspace
+```{r Save and Load RData}
+# clean up workspace
+remove(contributions.county_conflicting, contributions.county_error, contributions.county_invalid, rowf, rowf_v)
+# save workspace to file
+#save.image("data/campaign_data.RData")
+# load workspace
+#load('data/campaign_data.RData')
+```
+
+
+
+## Univariate Plots Section
+- In this part, we use the univariate plots of our data to show basic statistics of data frames.
+
+### Questions and Plots
+#### Group and summarize dataframe
+- It's important to group and summarize columns for detailed investigation.
+- It will be used both in univariate and bivariate plots.
+```{r}
+# function to return df group by ke_col, sum by sum_col, and order by order_col
+df_group_by <- function(df, key_col, sum_col, order_col) {
+  key_col <- as.name(substitute(key_col))
+  sum_col <- as.name(substitute(sum_col))
+  order_col <- as.name(substitute(order_col))
+  # group and summarise
+  df.group_by_key <- df %>%
+    dplyr::group_by_(key_col) %>%
+    dplyr::summarise(n = n(),
+                     sum = sum(sum_col),
+                     min = min(sum_col),
+                     mean = mean(sum_col),
+                     max = max(sum_col),
+                     var = var(sum_col)) %>%
+    arrange(n)
+  return(df.group_by_key)
+} 
+```
+
+#### Contribution count by date
+```{r}
+contributions.by_date <- df_group_by(contributions, key_col='date', 'amount', 'n')
+```
+
+- numbers of contributions has two peaks at 16/04 and 16/10
+```{r contribution count by date}
+p1 <- ggplot(aes(x=date), data=contributions) +
+  geom_histogram(binwidth=30) +
+  xlim(as.Date('15-01-01', '%y-%m-%d'), as.Date('16-11-01', '%y-%m-%d'))
+p2 <- ggplot(aes(x=date), data=contributions) +
+  geom_histogram(binwidth=7) + 
+  xlim(as.Date('15-01-01', '%y-%m-%d'), as.Date('16-11-01', '%y-%m-%d'))
+grid.arrange(p1, p2, ncol=1)
+```
+#### Contribution amount distribution
+- amount of contributions has several peaks at 1000, 3000, 5000, 7000
+```{r contribution amount}
+p1 <- ggplot(aes(x=amount), data=contributions) +
+  geom_histogram(binwidth=1000)
+p2 <- ggplot(aes(x=amount), data=contributions) +
+  geom_histogram(binwidth=100)
+grid.arrange(p1, p2, ncol=1)
+```
+
+#### Countribution count by county
+- group and summarize contribution by county, then merge with votes
+```{r}
+contributions.by_county <- df_group_by(contributions, key_col='county', 'amount', 'n')
+# merge with votes
+contributions.by_county <- left_join(contributions.by_county, votes, by='county')
+```
+
+- Counties with top counts of contribution are Los Angeles, San Diego, Alameda, San Francisco and Orange.
+```{r contribution count by county}
+ggplot(aes(x = reorder(county, -n), y = n), data = contributions.by_county) +
+  geom_bar(stat = "identity") +
+  xlab('county') + 
+  ggtitle('contribution count by county') +
+  theme(axis.text.x = element_text(size=10, angle = 90, hjust = 1))
+```
+- They are also among the counties with top 10 population.
+```{r population by county}
+ggplot(aes(x=reorder(county, -population), y=population), data=votes) +
+  geom_bar(stat='identity') +
+  xlab('county') + 
+  ggtitle('population by county') +
+  theme(axis.text.x = element_text(size=10, angle = 90, hjust = 1))
+```
+#### Contribution amount by candidate
+- group and summarize contribution by candidate, then merge with candidates
+```{r}
+contributions.by_candidate <- df_group_by(contributions, key_col='candidate', 'amount', 'n')
+# merge with candidates
+contributions.by_candidate <- left_join(contributions.by_candidate, candidates, by='candidate')
+```
+- Republicians received most contributions in CA, more than four times larger than the total of others.
+```{r contribution count by candidate}
+ggplot(aes(x = reorder(candidate, -n), y = n), data = contributions.by_candidate) +
+  geom_bar(stat = "identity") +
+  xlab('candidate') +
+  ggtitle('contribution count by candidate') +
+  theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
+```
+
+```{r contribution count by party}
+ggplot(aes(x=party, fill=party), data=contributions) +
+  geom_bar() +
+  ggtitle('contribution count by party') +
+  geom_bar(alpha=1)
+```
+
+#### Contribution count by employer and occupation
+- There are large number of categories and NA entries for `employer` data. There are also repeating employer types filled by contributers.
+- But we can still see the patterns that most counts of contribution come from the retired, self-employed, unversity stuff or student, as well as software and Internet industry.
+```{r}
+# group and summarize by employer, sort in descending order
+contributions.by_employer <- df_group_by(contributions, key_col='employer', 'amount', 'n')
+contributions.by_employer <- arrange(contributions.by_employer, -n)
+
+print("Unique Employer"); nrow(contributions.by_employer); print("Number of NA"); sum(is.na(contributions.by_employer));
+```
+
+```{r contribution count by employer}
+ggplot(aes(x = reorder(employer, -n), y = n), 
+       data = contributions.by_employer[c(1:20),]) +
+  geom_bar(stat = "identity") +
+  xlab('employer') +
+  ggtitle('contribution count by employer') +
+  theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
+```
+- The situation of contribution count vs occupation is similar to that of employer type, with the variety decreases nealy by a half.
+- The top occupations are the retired, the unemployed, software enginneer, professor, self-employed, students, etc.
+```{r contribution count by occupation}
+contributions.by_occupation <- df_group_by(contributions, key_col='occupation', 'amount', 'n')
+contributions.by_occupation <- arrange(contributions.by_occupation, -n)
+
+print("Number of Unique Occupation"); nrow(contributions.by_occupation); print("Number of NA"); sum(is.na(contributions.by_occupation));
+```
+
+```{r contribution count by occupation}
+ggplot(aes(x = reorder(occupation, -n), y = n), 
+       data = contributions.by_occupation[c(1:20),]) +
+  geom_bar(stat = "identity") +
+  xlab('occupation') +
+  ggtitle('contribution count by occupation') +
+  theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
+```
+
+
+### Univariate Analysis
+
+#### What is the structure of your dataset?
+- The source data are within three related dataframes, the details can be found at the data wrangling section.
+- The `contributions` contains all contribution related information.
+- The `votes` table contains background information such as income, population by county. It also has the votes result of presendential election of CA by county.
+
+
+#### What is/are the main feature(s) of interest in your dataset?
+1. What's the rough distribution of contribution counts over employer, occupation, date?
+  - We need the basics statistics to figure out the more import factors for following analysis.
+  - For example, we identify there are interesting and maybe important patterns for amount histogram and amount vs date. They may be closely related with the trends of overall process of campaign.
+  - Meanwhile, contribution vs employer and occupation are less important as the data is incomplete and has low quality, so we will drop the study on these factors.
+  
+2. What's the popular candidate, county?
+  - We want to figure this part out as the core of campaign is about attracting financial resources and popularity by each candidate/party, in each county.
+  - This may have relation with the final electionr results, which we will study soon.
+
+
+#### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+1. We need background of the residents, mainly their incoming and local population.
+2. We also want to find some relationship between the contribution and election result, so the votes are also necessary.
+
+#### Did you create any new variables from existing variables in the dataset?
+Yes. 
+Most of the data analysis is within table `contributions` and dataframes grouped and summarized based on it, for example `contributions.by_candidate`, `contributions.by_couty`, and `contributions.by_date`.
+They will be used extensively across the project.
+
+
+#### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+- There are some regular data wrangling problems in first section, which as been well solved and documented.
+- In the plotting part, we observe several patterns that worth further study.
+  - The distribution of contribution amount and count vs county, count vs candidate is very unbalanced, namely the top 3 could make up 80% of total value.
+  - For the contribution count vs time and count vs candidate, we know as the campaign moved on, most candidates withdrew and only two of them left. When did they start to draw attention both in contribution and popularity? We will need to investigate that.
+  
+
+
+## Bivariate Plots Section
+In this part, we further analyze the datasets, focusing on the following questions.
+
+### Questions and Plots
+#### What was process of the financial campaign?
+- Republicians received most contributions in CA, more than four times larger than the total of others.
+```{r contribution sum by candidate of different party}
+ggplot(aes(x = reorder(candidate, -sum), y = sum, fill=party), data = contributions.by_candidate) +
+  geom_bar(stat = "identity") +
+  xlab('candidate') +
+  ggtitle('total contribution by candidate') +
+  theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
+```
+```{r contribution sum of candidates by date}
+
+
+
+```
+
+#### Who got the most of the campaign?
+
+
+#### How is the contribution preference compared to election results?
+
+
+### Bivariate Analysis
+
+
+#### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+
+#### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+
+#### What was the strongest relationship you found?
+
+
+
+
+## Multivariate Plots Section
+- Focus on final candidates Hillary and Trump or parties, based on change in donation history
+
+- amount vs date by candiates/party, line plot
+- income vs donation ratio, scatter plot, maybe scale and fit
+- income vs votes ratio, scatter plot, maybe scale and fit
+- city vs ratio (by votes and donation), 4 scales heat map
+
+
+```{r echo=FALSE, Multivariate_Plots}
+
+```
+
+### Multivariate Analysis
+
+#### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+
+#### Were there any interesting or surprising interactions between features?
+
+#### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+
+------
+
+## Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+
+```
+
+### Description One
+
+
+### Plot Two
+```{r echo=FALSE, Plot_Two}
+
+```
+
+### Description Two
+
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+
+```
+
+### Description Three
+
+------
+
+## Reflection
+
+
+
+
+### Source
+- [Heat map](http://stackoverflow.com/questions/1260965/developing-geographic-thematic-maps-with-r)
+- [2016 CA election results from NYTimes](http://www.nytimes.com/elections/results/california)
+- [2014 CA income data from US Cencus](http://factfinder.census.gov/bkmk/table/1.0/en/ACS/14_5YR/GCT1902.ST05/0400000US06)
+- [R Markdown](https://raw.githubusercontent.com/winkelman/udacity-dand-eda/master/project.Rmd)
