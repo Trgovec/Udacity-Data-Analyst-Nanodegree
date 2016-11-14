@@ -1,24 +1,15 @@
 ---
-title: "2016 US Presidental Campaign Financial Contributions Data Exploration"
+title: "US 2016 Presidental Campaign Financial Contributions Data Exploration"
 author: "Neo Xing"
-date: "11/10/2016"
+date: "11/2016"
+output: html_document
 ---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8,
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
 
-## Introduction
-In this project, we will explore the financial contributions to 2016 US Presidential candidates of California (CA).
-We try to unconver the statistics in contribution data, as well as its relationship with the community background and election result of CA.
-
-1M contributions
-25 candidates
-58 counties
-2+ years
-
-
-- [Data Set Options](https://docs.google.com/document/d/1qEcwltBMlRYZT-l699-71TzInWfk4W9q5rTCSvDVMpc/pub?embedded=true)
-- [Financial Contributions to Presidential Campaigns by State](http://fec.gov/disclosurep/pnational.do)
-- [Wikipedia](https://en.wikipedia.org/wiki/Republican_Party_presidential_candidates,_2016)
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+```{r packages}
 # load library
 library(ggplot2)
 library(knitr)
@@ -29,33 +20,38 @@ library(stringr)    # str_to_title
 library(tidyverse)  # parse_integer
 library(noncensus)  # city and county data
 library(gridExtra)
-
 set.seed(42)
 ```
 
+### Introduction
+In this project, we will explore the financial contributions to 2016 US Presidential candidates of California (CA).
+We try to unconver the statistics in contribution data, as well as its relationship with the voters' background and election result of CA usning exploratory data analysis techiniques. 
+
+The data set contains about 1M contributions records from 2014 to 2016 of CA, it contains 58 counties in CA, 25 condidates of Democrat, Republican and other parties.
+
 ## Data Wrangling
-In this section, we audit, clean and manupulate data for later exploration. 
+In this section, we audit, clean and manupulate data to preapre for later exploration. 
 Data will be firstly loaded and preprocessed sperately, then several dataframes will be built and used in the following sections.
 
-```{r}
+```{r message=TRUE}
+#- Data files
 ## list data
 system('du -sh data/* | cat -n')
 ```
 
-### Data Preprocess
-We will load and take glimps of the data rows. 
+### Data Preprocessing
+We will load and take glimps of the data rows.
 After it the data will be preprocessed by dropping unused part, renaming columns, covnertting data types, and formatting.
-
 
 #### Financial contribution data
 
 ##### Data structure
-```{r set-options}
+```{r include=TRUE}
 # skip header as there's an extra `,` at end of each line
 contributions <- read.csv('data/ca_contributions.csv', header=F, na.strings="N/A")
-head(contributions)
 ```
-```{r}
+
+```{r message=TRUE}
 str(contributions)
 ```
 
@@ -71,7 +67,7 @@ str(contributions)
   - check for invalid values such as `N/A`
 
 - load and preprocess data
-```{r}
+```{r include=TRUE}
 # drop header row and unused columns
 contributions <- contributions[c(-1),c(3, 5, 6, 7, 8, 9, 10, 11)]
 # rename columns
@@ -87,33 +83,46 @@ contributions$city <- str_to_title(contributions$city)
 # convert candidate name to first name only
 contributions <- extract(contributions, candidate, c('candidate'), '(^.*),.*')
 # convert occupation to lower case
-contributions$occupation <- tolower(contributions$occupation)
+contributions$occupation <- str_to_title(contributions$occupation)
+# convert repeated and invliad employer types
+contributions$occupation[contributions$occupation=='Information Requested'] <- 'NA'
+contributions$occupation[is.na(contributions$occupation)] <- 'NA'
 # convert employer to capitalized format
 contributions$employer <- str_to_title(contributions$employer)
+# convert repeated and invliad employer types
+contributions$employer[contributions$employer=='Self'] <- 'Self Employed'
+contributions$employer[contributions$employer=='Self-Employed'] <- 'Self Employed'
+contributions$employer[contributions$employer=='Self Employed-Employed'] <- 'Self Employed'
+contributions$employer[contributions$employer=='None'] <- 'Not Employed'
+contributions$employer[contributions$employer=='Unemployed'] <- 'Not Employed'
+contributions$employer[contributions$employer=='Information Requested'] <- 'NA'
+contributions$employer[contributions$employer=='Information Requested Per Best Efforts'] <- 'NA'
+contributions$employer[is.na(contributions$employer)] <- 'NA'
 ```
 
 - check state equals to CA
 ```{r}
 # check state equals to CA
-subset(contributions, state != 'CA')
-# is so we can drop it
+contributions <- subset(contributions, state == 'CA')
+# then drop state
 contributions$state <- NULL
 ```
 
-- check number of N/A in each columns
-```{r}
+- check number of `NA` in each columns
+  - for `employer` we only care the top ranks, minor numbers of `NA` will be ignored
+  - for `occupation` we will decide if further cleaning is necessary after more exploration
+```{r message=TRUE}
 # check number of N/A each columns
 apply(apply(contributions, 2, is.na), 2, sum)
 ```
-- for `employer` and `occupation`, we only care the top ranks, so `N/A` will simply be ignored
 
 
 #### Average family income by county
-We will use the family income data to gain more background of the contributors and voters in CA. The data comes from national census 2014.
-The preprocessing following similar steps as contribution data.
+We will use the family income data to gain more background of the contributors and voters in CA. The data comes from US 2014 census.
+The preprocessing follow similar steps as contribution data.
 
 ##### Data structure
-```{r}
+```{r include=TRUE}
 ## load and merge average family income to counties
 income = read.csv('data/ca_family_income.csv')
 str(income)
@@ -122,21 +131,21 @@ str(income)
 - drop unused columns except for `county` name and `family_income`
 - convert income to numeric value
 
-```{r}
+```{r message=TRUE}
 income = income[c('GCT_STUB.display.label.1', 'HC01')]
 colnames(income) <- c('county', 'family_income')
 # drop first row as it's actually sub header
 income <- income[-c(1, 2), ]
 # convert to numeric types
 income$family_income <- as.numeric(as.character(income$family_income))
-
 # convert column name `XX County` to `XX`
 income$county <- sub(x=income$county, pattern=' County', replacement='', ignore.case=T)
+head(income)
 ```
 
 #### Votes of presendtial election
 ##### Data structure
-```{r}
+```{r include=TRUE}
 ## load and merge average family income to counties
 votes = read.csv('data/ca_votes.csv')
 str(votes)
@@ -146,42 +155,48 @@ str(votes)
 - drop unused columns except for `county` name and votes for `Clinton` and votes for `Trump`
 - convert votes to integers
 
-```{r}
+```{r message=TRUE}
 colnames(votes) <- c('county', 'Clinton', 'Trump', 'report')
 votes$report <- NULL
 # convert votes
 votes[c('Clinton', 'Trump')] <- apply(votes[c('Clinton', 'Trump')], 2, parse_number)
 # convert county to character
 votes$county <- as.character(votes$county)
+head(votes)
 ```
 
 
 #### Presendential Candidates
 - the candidates data has been preprocessed
-```{r}
+```{r include=TRUE}
 ## load and merge average family income to counties
 candidates = read.csv('data/candidates.csv')
 str(candidates)
 ```
 - convert items to character type
-```{r}
+```{r message=TRUE}
 # convert 
 candidates[c(1:3)] <- apply(candidates, 2, as.character)
-candidates
+head(candidates)
 ```
 
 #### City and County Data
 - we need them to map city name or zip to county
-- the population by county will be useful
-```{r}
+- the population by county will also be used
+
+##### Data Structure
+```{r include=TRUE}
 ## load cities by zip code and couties by fips code of CA
 data(zip_codes)
 data(counties)
-summary(zip_codes); summary(counties);
+head(zip_codes);head(counties)
 ```
 
+##### Combing data
+- we will keep CA data in zip_codes and counties
+- then merge county information to zip_codes using county identifier `fips`
 
-```{r}
+```{r message=TRUE}
 # only keep CA data
 zip_codes <- subset(zip_codes, state=='CA')
 # compute fips -- unique id for county
@@ -198,23 +213,27 @@ counties$fips <- as.numeric(as.character(counties$state_fips)) * 1000 +
 colnames(counties)[[1]] <- 'county'
 # convert column name `XX County` to `XX`
 counties$county <- sub(x=counties$county, pattern=' County', replacement='', ignore.case=T)
+
+head(zip_codes)
 ```
 
 ### Data Manupulation
-#### Merge dataframes `income`, `counties` to `votes`
-
-```{r}
+#### Merge dataframes
+- merge `income`, `counties` to `votes`, as they all belong to information of each county
+```{r message=TRUE}
 votes <- merge(votes, income, by='county')
 votes <- left_join(votes, select(counties, county, population), by='county')
 summary(votes);
 ```
 
-```{r}
-votes
+```{r message=TRUE}
+head(votes)
 ```
 
-#### Map zip_codes/city to county
-```{r}
+#### Map city to county
+- get the map between city to county and store it in `zip_codes`
+- it will be used as a bridge between `contributions` and `votes` or `counties`
+```{r message=TRUE}
 # merge counties to zip_codes on fips
 zip_codes <- merge(zip_codes[, c('zip', 'city', 'fips')], counties[, c('county', 'fips')], by='fips')
 # drop_fips
@@ -231,7 +250,7 @@ head(zip_codes)
   3. Both columns are not `NA`, then we lack the information about the truth, we will keep the rows except for statistics when county is involved
   4. Both columns are `NA`, it should be dropped as invalid data
   
-```{r}
+```{r message=TRUE}
 # look up county in zip_codes table using zip code
 contributions$county_by_zip <- with(zip_codes, county[match(contributions$zip, zip)])
 # look up county in zip_codes table using city name
@@ -242,18 +261,18 @@ head(contributions.county_error, 10);
 ```
 
 - Total error number of county entry
-```{r}
+```{r message=TRUE}
 nrow(contributions.county_error); 
 ```
 
 - Number of conflicting county entry
-```{r}
+```{r message=TRUE}
 # subset of conflicting county columns
 contributions.county_conflicting <- subset(contributions.county_error, !is.na(county_by_zip) & !is.na(county_by_city))
 nrow(contributions.county_conflicting)
 ```
 - Number of invalid county entry
-```{r}
+```{r message=TRUE}
 # subset of invalid county columns
 contributions.county_invalid <- subset(contributions.county_error, is.na(county_by_zip) & is.na(county_by_city))
 nrow(contributions.county_invalid)
@@ -261,7 +280,7 @@ nrow(contributions.county_invalid)
 
 ##### Cleaning Contribution
 - We refer zip_codes as the standard data source, and will try to indentify and fix errors in county column of countributions table by combining two county columns.
-- Try to fix the first two types of error
+- fix the first two types of error
 ```{r}
 rowf <- function(a, b) {
   if (is.na(a)) {
@@ -276,20 +295,18 @@ rowf <- function(a, b) {
 }
 rowf_v <- Vectorize(rowf)
 contributions$county <- rowf_v(contributions$county_by_zip, contributions$county_by_city)
-
 ```
 
-- final number of invalid county entries
-```{r}
+- then final number of invalid county entries
+```{r message=TRUE}
 nrow(subset(contributions, is.na(county)))
 ```
 - invalid county entries examples
-```{r}
-subset(contributions, is.na(county))
+```{r message=TRUE}
+head(subset(contributions, is.na(county)))
 ```
 
-- drop unused columns
-
+- unused columns such as `city, zip` can be dropped
 ```{r}
 # drop city and zip
 contributions$city <- contributions$zip <- NULL
@@ -298,9 +315,9 @@ contributions$county_by_city <- contributions$county_by_zip <- NULL
 ```
 
 #### Merge candidates, votes to contributions
-- This is possible as dataset is not very large, otherwise, it should be stored in several tables as SQL database.
+- This is convenient since dataset is not very large, otherwise, it should be stored in several tables as SQL database.
 
-##### add party of contributions
+- add party of contributions
 ```{r}
 # add party of candiadte
 # contributions$party <- with(candidates, party[match(contributions$candidate, candidate)])
@@ -308,30 +325,34 @@ contributions$county_by_city <- contributions$county_by_zip <- NULL
 contributions <- left_join(contributions, select(candidates, candidate, party), by='candidate')
 ```
 
-##### add votes to contributions
 ```{r}
+#- add votes to contributions
 #contributions <- left_join(contributions, votes, by='county')
 ```
 
 ### Data Overview
 #### Dataframe contributions
-- `contributions` is the single dataframe for exploration 
-```{r}
+- `contributions` is the main dataframe for exploration 
+```{r message=TRUE}
 head(contributions)
 ```
 
-```{r}
+```{r message=TRUE}
 summary(contributions)
 ```
 
-- check number of N/A in each columns
 ```{r}
+# check final number of `NA` in each columns
 # check number of N/A each columns
 apply(apply(contributions, 2, is.na), 2, sum)
 ```
 
-#### Cleanup workspace
-```{r Save and Load RData}
+- `votes` contains the background information and election results by county
+```{r message=TRUE}
+head(votes)
+```
+
+```{r}
 # clean up workspace
 remove(contributions.county_conflicting, contributions.county_error, contributions.county_invalid, rowf, rowf_v)
 # save workspace to file
@@ -341,15 +362,13 @@ remove(contributions.county_conflicting, contributions.county_error, contributio
 ```
 
 
-
 ## Univariate Plots Section
-- In this part, we use the univariate plots of our data to show basic statistics of data frames.
+In this part, we will use the univariate plots to show basic statistics of the data.
 
-### Questions and Plots
 #### Group and summarize dataframe
 - It's important to group and summarize columns for detailed investigation.
 - It will be used both in univariate and bivariate plots.
-```{r}
+```{r include=TRUE}
 # function to return df group by ke_col, sum by sum_col, and order by order_col
 df_group_by <- function(df, key_col, sum_col, order_col) {
   key_col <- as.name(substitute(key_col))
@@ -370,7 +389,7 @@ df_group_by <- function(df, key_col, sum_col, order_col) {
 ```
 
 #### Contribution count by date
-```{r}
+```{r message=TRUE}
 contributions.by_date <- df_group_by(contributions, key_col='date', 'amount', 'n')
 ```
 
@@ -382,35 +401,41 @@ p1 <- ggplot(aes(x=date), data=contributions) +
 p2 <- ggplot(aes(x=date), data=contributions) +
   geom_histogram(binwidth=7) + 
   xlim(as.Date('15-01-01', '%y-%m-%d'), as.Date('16-11-01', '%y-%m-%d'))
+
 grid.arrange(p1, p2, ncol=1)
 ```
+
 #### Contribution amount distribution
-- amount of contributions has several peaks at 1000, 3000, 5000, 7000
+- most of the contribution amount is winthin `$100`, with some peaks at `$250` and `$500`
 ```{r contribution amount}
 p1 <- ggplot(aes(x=amount), data=contributions) +
-  geom_histogram(binwidth=1000)
+  geom_histogram(binwidth=100) +
+  xlim(-1000, 10000)
 p2 <- ggplot(aes(x=amount), data=contributions) +
-  geom_histogram(binwidth=100)
+  geom_histogram(binwidth=10) +
+  xlim(-100, 1000)
 grid.arrange(p1, p2, ncol=1)
 ```
 
 #### Countribution count by county
 - group and summarize contribution by county, then merge with votes
-```{r}
+```{r message=TRUE}
 contributions.by_county <- df_group_by(contributions, key_col='county', 'amount', 'n')
 # merge with votes
 contributions.by_county <- left_join(contributions.by_county, votes, by='county')
 ```
 
-- Counties with top counts of contribution are Los Angeles, San Diego, Alameda, San Francisco and Orange.
+- counties with top counts of contribution are Los Angeles, San Diego, Alameda, San Francisco and Orange.
 ```{r contribution count by county}
 ggplot(aes(x = reorder(county, -n), y = n), data = contributions.by_county) +
   geom_bar(stat = "identity") +
   xlab('county') + 
+  ylab('count') +
   ggtitle('contribution count by county') +
   theme(axis.text.x = element_text(size=10, angle = 90, hjust = 1))
 ```
-- They are also among the counties with top 10 population.
+
+- they are also among the counties with top 10 population
 ```{r population by county}
 ggplot(aes(x=reorder(county, -population), y=population), data=votes) +
   geom_bar(stat='identity') +
@@ -418,18 +443,21 @@ ggplot(aes(x=reorder(county, -population), y=population), data=votes) +
   ggtitle('population by county') +
   theme(axis.text.x = element_text(size=10, angle = 90, hjust = 1))
 ```
-#### Contribution amount by candidate
+
+#### Contribution count by candidate
 - group and summarize contribution by candidate, then merge with candidates
 ```{r}
 contributions.by_candidate <- df_group_by(contributions, key_col='candidate', 'amount', 'n')
 # merge with candidates
 contributions.by_candidate <- left_join(contributions.by_candidate, candidates, by='candidate')
 ```
+
 - Republicians received most contributions in CA, more than four times larger than the total of others.
 ```{r contribution count by candidate}
 ggplot(aes(x = reorder(candidate, -n), y = n), data = contributions.by_candidate) +
   geom_bar(stat = "identity") +
   xlab('candidate') +
+  ylab('count') +
   ggtitle('contribution count by candidate') +
   theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
 ```
@@ -442,39 +470,44 @@ ggplot(aes(x=party, fill=party), data=contributions) +
 ```
 
 #### Contribution count by employer and occupation
-- There are large number of categories and NA entries for `employer` data. There are also repeating employer types filled by contributers.
-- But we can still see the patterns that most counts of contribution come from the retired, self-employed, unversity stuff or student, as well as software and Internet industry.
-```{r}
+- There are large number of categories and NA entries for `employer` data.
+
+numbers of unique employer and `NA`
+```{r message=TRUE}
 # group and summarize by employer, sort in descending order
 contributions.by_employer <- df_group_by(contributions, key_col='employer', 'amount', 'n')
 contributions.by_employer <- arrange(contributions.by_employer, -n)
-
-print("Unique Employer"); nrow(contributions.by_employer); print("Number of NA"); sum(is.na(contributions.by_employer));
+nrow(contributions.by_employer); sum(is.na(contributions.by_employer));
 ```
 
+- But we can still see the patterns that most counts of contribution come from the unemployed, self-employed, retired, self-employed, unversity stuff or student, as well as software and Internet industry.
 ```{r contribution count by employer}
 ggplot(aes(x = reorder(employer, -n), y = n), 
        data = contributions.by_employer[c(1:20),]) +
   geom_bar(stat = "identity") +
   xlab('employer') +
+  ylab('count') +
   ggtitle('contribution count by employer') +
   theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
 ```
-- The situation of contribution count vs occupation is similar to that of employer type, with the variety decreases nealy by a half.
-- The top occupations are the retired, the unemployed, software enginneer, professor, self-employed, students, etc.
-```{r contribution count by occupation}
+
+- The situation of contribution count vs occupation is similar to employer, with the variety decreases nealy by a half.
+
+unique numbers of occupation type and `NA`
+```{r message=TRUE}
 contributions.by_occupation <- df_group_by(contributions, key_col='occupation', 'amount', 'n')
 contributions.by_occupation <- arrange(contributions.by_occupation, -n)
-
-print("Number of Unique Occupation"); nrow(contributions.by_occupation); print("Number of NA"); sum(is.na(contributions.by_occupation));
+nrow(contributions.by_occupation); sum(is.na(contributions.by_occupation));
 ```
 
+- The top occupations are the retired, unemployed, attorney, enginneer, professor, homemaker, self-employed, students, etc.
 ```{r contribution count by occupation}
 ggplot(aes(x = reorder(occupation, -n), y = n), 
        data = contributions.by_occupation[c(1:20),]) +
   geom_bar(stat = "identity") +
   xlab('occupation') +
   ggtitle('contribution count by occupation') +
+  ylab('count') +
   theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
 ```
 
@@ -486,27 +519,24 @@ ggplot(aes(x = reorder(occupation, -n), y = n),
 - The `contributions` contains all contribution related information.
 - The `votes` table contains background information such as income, population by county. It also has the votes result of presendential election of CA by county.
 
-
 #### What is/are the main feature(s) of interest in your dataset?
 1. What's the rough distribution of contribution counts over employer, occupation, date?
   - We need the basics statistics to figure out the more import factors for following analysis.
   - For example, we identify there are interesting and maybe important patterns for amount histogram and amount vs date. They may be closely related with the trends of overall process of campaign.
-  - Meanwhile, contribution vs employer and occupation are less important as the data is incomplete and has low quality, so we will drop the study on these factors.
+  - Meanwhile, contribution vs occupation or employer suffers from low quality problem, so we will focus only the top ranking and more robust data.
   
 2. What's the popular candidate, county?
   - We want to figure this part out as the core of campaign is about attracting financial resources and popularity by each candidate/party, in each county.
-  - This may have relation with the final electionr results, which we will study soon.
-
+  - This may have relation with the final electionr results that we will study soon.
 
 #### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
-1. We need background of the residents, mainly their incoming and local population.
+1. We need background of the residents, mainly their incomes and local population.
 2. We also want to find some relationship between the contribution and election result, so the votes are also necessary.
 
 #### Did you create any new variables from existing variables in the dataset?
-Yes. 
-Most of the data analysis is within table `contributions` and dataframes grouped and summarized based on it, for example `contributions.by_candidate`, `contributions.by_couty`, and `contributions.by_date`.
-They will be used extensively across the project.
 
+- Yes. 
+- Most of the data analysis is within table `contributions` and dataframes grouped and summarized based on it, for example `contributions.by_candidate`, `contributions.by_couty`, and `contributions.by_date`.
 
 #### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
 - There are some regular data wrangling problems in first section, which as been well solved and documented.
@@ -514,102 +544,314 @@ They will be used extensively across the project.
   - The distribution of contribution amount and count vs county, count vs candidate is very unbalanced, namely the top 3 could make up 80% of total value.
   - For the contribution count vs time and count vs candidate, we know as the campaign moved on, most candidates withdrew and only two of them left. When did they start to draw attention both in contribution and popularity? We will need to investigate that.
   
-
+  
 
 ## Bivariate Plots Section
 In this part, we further analyze the datasets, focusing on the following questions.
 
 ### Questions and Plots
-#### What was process of the financial campaign?
-- Republicians received most contributions in CA, more than four times larger than the total of others.
-```{r contribution sum by candidate of different party}
+#### Which candidates/party got the most of the campaign?
+- The plot confirms that Republicians receive most contributions in CA.
+- The ratio between two final candidates Clinton and Trump is more than 10 times.
+
+```{r contribution sum by candidate of each candidate}
 ggplot(aes(x = reorder(candidate, -sum), y = sum, fill=party), data = contributions.by_candidate) +
   geom_bar(stat = "identity") +
   xlab('candidate') +
-  ggtitle('total contribution by candidate') +
+  ggtitle('contribution sum by candidate of each candidate') +
+  ylab('amount') +
   theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
 ```
-```{r contribution sum of candidates by date}
 
 
+#### What is the overall process of the financial campaign?
+- The change of total contribution of different parties shows Democrat have a strong increasing campaign trend.
+- For the Republican, it slows down by a small amount since April 2016.
 
+```{r contribution cumulative sum by date of different parties}
+# get accumulate sum amount for Republican
+contributions.by_date_repub <- df_group_by(subset(contributions, party=='Republican'),
+                                           key_col='date', 'amount', 'n')
+contributions.by_date_repub <- arrange(contributions.by_date_repub, date)
+contributions.by_date_repub$cumsum <- cumsum(contributions.by_date_repub$sum)
+# get accumulate sum amount for Democrat
+contributions.by_date_democ <- df_group_by(subset(contributions, party=='Democrat'),
+                                           key_col='date', 'amount', 'n')
+contributions.by_date_democ <- arrange(contributions.by_date_democ, date)
+contributions.by_date_democ$cumsum <- cumsum(contributions.by_date_democ$sum)
+# get accumulate sum amount for Democrat
+contributions.by_date_other <- df_group_by(subset(contributions, party=='Other'),
+                                           key_col='date', 'amount', 'n')
+contributions.by_date_other <- arrange(contributions.by_date_other, date)
+contributions.by_date_other$cumsum <- cumsum(contributions.by_date_other$sum)
+
+ggplot() +
+  geom_line(data=contributions.by_date_repub, aes(x=date, y=cumsum, color='Republican'), size=1.5) +
+  geom_line(data=contributions.by_date_democ, aes(x=date, y=cumsum, color='Democrat'), size=1.5) +
+  geom_line(data=contributions.by_date_other, aes(x=date, y=cumsum, color='Other'), size=1.5) +
+  labs(color='Party') +
+  ylab('cumulative amount') +
+  ggtitle('cumulative sum of contribution amount by date of each party')
 ```
 
-#### Who got the most of the campaign?
+#### How is the contribution preference related with election results?
+- Below is a scatter plot of vote preference vs contribution preference by county of Republican and Democrat.
+- There seems to be a strong positive correlation between these two factors.
 
+```{r vote preference vs contribution preference by county}
+# sort groups using order of county
+contributions.by_county <- arrange(contributions.by_county, county)
 
-#### How is the contribution preference compared to election results?
+# get total amount by county of Republican
+repub <- df_group_by(subset(contributions, party=='Republican'),
+                                           key_col='county', 'amount', 'n')
+contributions.by_county$repub_sum <- with(repub, sum[match(contributions.by_county$county, county)])
 
+# get total amount by county of Democrat
+democ <- df_group_by(subset(contributions, party=='Democrat'),
+                                           key_col='county', 'amount', 'n')
+contributions.by_county$democ_sum <- with(democ, sum[match(contributions.by_county$county, county)])
+
+# get contribution countby county of Republican
+repub <- df_group_by(subset(contributions, party=='Republican'),
+                                           key_col='county', 'amount', 'n')
+contributions.by_county$repub_n <- with(repub, n[match(contributions.by_county$county, county)])
+
+# get contribution count by county of Democrat
+democ <- df_group_by(subset(contributions, party=='Democrat'),
+                                           key_col='county', 'amount', 'n')
+contributions.by_county$democ_n <- with(democ, n[match(contributions.by_county$county, county)])
+
+ggplot(data=contributions.by_county, 
+       aes(x=(democ_n-repub_n)/(democ_n + repub_n), 
+           y=(Clinton-Trump)/(Clinton + Trump))) +
+    geom_point(shape=1) +
+    # Add linear regression line of 95% confidence region
+    geom_smooth(method=lm) +
+  xlab('difference in contribution count Democrat - Republican') +
+  ylab('difference in votes Clinton - Trump') +
+  ggtitle('vote preference vs contribution preference by county')
+```
+
+#### How is the family income related with election votes?
+- Below is a scatter plot of average family income vs election votes by county of Republican and Democrat.
+- There also seems to be a loose but positive correlation between these two factors.
+
+```{r}
+ggplot(data=contributions.by_county, 
+       aes(x=family_income, 
+           y=(Clinton - Trump) / (Clinton + Trump))) +
+    geom_point(shape=1) +
+    # Add linear regression line of 95% confidence region
+    geom_smooth(method=lm) +
+  ylab('difference in votes Clinton - Trump') +
+  ggtitle('vote preference vs contribution preference by county')
+```
+
+#### How is the family income related with election votes?
+- Below is a scatter plot of average family income vs election votes by county of Republican and Democrat.
+- There also seems to be a very loosely positive correlation between these two factors.
+
+```{r}
+ggplot(data=contributions.by_county, 
+       aes(x=family_income,y=sum/n)) +
+    geom_point(shape=1) +
+    # Add linear regression line of 95% confidence region
+    geom_smooth(method=lm) +
+  ylab('average amount') +
+  ggtitle('vote preference vs contribution preference by county')
+```
 
 ### Bivariate Analysis
 
-
 #### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+As studied in previous plots part, there are mainly two patterns.
+
+1. For the financial campaign in CA, the Republican received more contributions than the Democrat, either by candidates, by party, or by time.
+2. There's a positive correlation between contribution preference and voting preference.
+3. Generally, people with higher average family income will tend to vote for Clinton (the Democrat), those with lower average family income will tend to vote for Trump (the Republican).
 
 #### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+- The other parties or candidates have overall little influence in the campaign.
+- The Democats and Republicans almost start the campaign at the same time, yet Democats manage to rush all the way until near election.
+- Republican's final candidate Trump didn't get much contribution, on the contrary, he could the cause of the falt zone of Republican's campaign starting from April 2016.
 
 #### What was the strongest relationship you found?
-
+- There's positive correlation between average contribution preference and voting preference.
+- Namely, Democrat contributers tend to vote for Clinton, Republican supporters for Trump.
 
 
 
 ## Multivariate Plots Section
-- Focus on final candidates Hillary and Trump or parties, based on change in donation history
+In this section, we will focus on study of final candidates Hillary and Trump, or the Democrat and Republican.
 
-- amount vs date by candiates/party, line plot
-- income vs donation ratio, scatter plot, maybe scale and fit
-- income vs votes ratio, scatter plot, maybe scale and fit
-- city vs ratio (by votes and donation), 4 scales heat map
+### How much do supporters contribute to each party?
+- Below is the scatter plot the average contribution amount diveded by average family income of each county.
+- It shows that Democrat supporters tend to donate more money than the Republic Supporters.
 
+```{r average contribution amount on family income of each parity}
+ggplot() +
+  geom_point(data=contributions.by_county, aes(x=family_income, y=(repub_sum/ repub_n)/family_income, color='Republic')) +
+  geom_smooth(method=lm) +
+  geom_point(data=contributions.by_county, aes(x=family_income, y=(democ_sum/ democ_n)/family_income, color='Democrat')) +
+  geom_smooth(method=lm) +
+  labs(color='Party') +
+  ylab('average contribution amount per family income') +
+  ggtitle('average contribution amount on family income of each parity')
+```
 
-```{r echo=FALSE, Multivariate_Plots}
+### What's the contribution preference of people with different occupation?
+#### By contribution count
+- The following is barplots of the top 20 occupations and their contributions to each party.
+- Most people have strong preference of the Democrat over the Republic, with the exception of those who are `homemaker, retired, enginner, sales, ceo, and self-employed`.
 
+```{r contribution count among top occupations of each party}
+# sort groups using order of county
+# get total amount by county of Republican
+repub <- df_group_by(subset(contributions, party=='Republican'),
+                                           key_col='occupation', 'amount', 'n')
+contributions.by_occupation$repub_n <- with(repub, n[match(contributions.by_occupation$occupation, occupation)])
+contributions.by_occupation$repub_sum <- with(repub, sum[match(contributions.by_occupation$occupation, occupation)])
+
+# get total amount by county of Democrat
+democ <- df_group_by(subset(contributions, party=='Democrat'),
+                                           key_col='occupation', 'amount', 'n')
+contributions.by_occupation$democ_n <- with(democ, n[match(contributions.by_occupation$occupation, occupation)])
+contributions.by_occupation$democ_sum <- with(democ, sum[match(contributions.by_occupation$occupation, occupation)])
+  
+ggplot(melt(as.data.frame(contributions.by_occupation[c(1:20),c('occupation', 'repub_n', 'democ_n')]), 
+            id.vars = 'occupation', variable_name = 'party'),
+       aes(x=occupation, y=value, fill=party)) +
+  geom_bar(stat='identity', position='dodge') +
+  facet_wrap(~occupation,  scales = "free") +
+  ylab('count') +
+  ggtitle('contribution count among top occupations of each party')
+```
+
+#### By contribution amount
+- The following is barplots of the top 20 occupations and their contributions to each party by amount.
+- Most people have preference of the Democrat over the Republic.
+- The Repulican wins competive portion financial contribution from those who are homemaker, retired, CEO, sales, and lawer.
+
+```{r contribution sum among top occupationsof each party}
+ggplot(melt(as.data.frame(contributions.by_occupation[c(1:20),c('occupation', 'repub_sum', 'democ_sum')]), 
+            id.vars = 'occupation', variable_name = 'party'),
+       aes(x=occupation, y=value, fill=party)) +
+  geom_bar(stat='identity', position='dodge') +
+  facet_wrap(~occupation,  scales = "free" ) +
+  ylab('amount') +
+  ggtitle('contribution sum among top occupations of each party')
 ```
 
 ### Multivariate Analysis
 
 #### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+1. The Democrat supporters tend to donate more money than the Republic Supporters.
+2. Most people have strong preference of the Democrat over the Republic, with the exception of those who are `homemaker, retired, enginner, sales, ceo, and self-employed`.
+3. Most people have preference of the Democrat over the Republic, while the Repulican wins competive portion financial contribution from those who are homemaker, retired, CEO, sales, and lawer.
 
 #### Were there any interesting or surprising interactions between features?
-
-#### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+1. Republican supporters at CA has a very low and stable relative donation amount on family income, while for Democrat supporters, there is a large variance, which implies their income is higher than the average. It could be due to the large ratio of rich people in the Democat supporters.
+2. There are obvious patterns in the supporters by occupations. We can identify that the strong suppoters of the Democrat are people in public services and high incoming industry, such as professor, software enginner and artist. 
+3. For the Republican, the strong supporters are the low/middle class such as homemaker, self employed, retired, sales, engineer. However, there are also a large amount of contributiuon from ceo, consultant and lawyer.
 
 ------
 
 ## Final Plots and Summary
 
 ### Plot One
-```{r echo=FALSE, Plot_One}
+- sum of contribution amount vs candiate
 
+```{r echo=FALSE, Plot_One}
+ggplot(aes(x = reorder(candidate, -sum), y = sum, fill=party), data = contributions.by_candidate) +
+  geom_bar(stat = "identity") +
+  xlab('candidate') +
+  ggtitle('contribution sum of each candidate') +
+  ylab('total amount') +
+  theme(axis.text.x = element_text(size=10, angle = 45, hjust = 1))
 ```
 
 ### Description One
-
+- The plot shows us which candidates receive the most financial support from of the campaign.
+- The Republicians received most contributions in CA, Republican comes at the second, other parties have little share.
+- The ratio of contribution amount received between the final candidates Clinton and Trump is more than 10 times.
 
 ### Plot Two
-```{r echo=FALSE, Plot_Two}
+- cumulative sum of contribution amount vs date of each party
 
+```{r echo=FALSE, Plot_Two}
+ggplot() +
+  geom_line(data=contributions.by_date_repub, aes(x=date, y=cumsum, color='Republican'), size=1.5) +
+  geom_line(data=contributions.by_date_democ, aes(x=date, y=cumsum, color='Democrat'), size=1.5) +
+  geom_line(data=contributions.by_date_other, aes(x=date, y=cumsum, color='Other'), size=1.5) +
+  labs(color='Party') +
+  ylab('cumulative amount') +
+  ggtitle('cumulative sum of contribution amount by date for each party')
 ```
 
 ### Description Two
-
+- The plot that Democrat has strong campaign movement, which is trending with highest amount until close to election. It implies that the popularity of the Democra is increasing and leading among all the parites.
+- For Republican, it slows down since April of 2016, may be caused by the withdraw and change of the major candiates within the party. Its final total contribution amount is about 1/3 s of the Democrat's.
 
 ### Plot Three
-```{r echo=FALSE, Plot_Three}
+- contribution preference by count of different occupations of top occupations by contribution count
 
+```{r echo=FALSE, Plot_Three_1}
+ggplot(melt(as.data.frame(contributions.by_occupation[c(1:20),c('occupation', 'repub_n', 'democ_n')]), 
+            id.vars = 'occupation', variable_name = 'party'),
+       aes(x=occupation, y=value, fill=party)) +
+  geom_bar(stat='identity', position='dodge') +
+  facet_wrap(~occupation,  scales = "free") +
+  ylab('count') +
+  ggtitle('contribution count among top occupations of each party')
+```
+
+- and by contribution amount
+
+```{r echo=FALSE, Plot_Three_2}
+ggplot(melt(as.data.frame(contributions.by_occupation[c(1:20),c('occupation', 'repub_sum', 'democ_sum')]), 
+            id.vars = 'occupation', variable_name = 'party'),
+       aes(x=occupation, y=value, fill=party)) +
+  geom_bar(stat='identity', position='dodge') +
+  ylab('amount') +
+  facet_wrap(~occupation,  scales = "free" ) +
+  ggtitle('contribution sum among top occupations of each party')
 ```
 
 ### Description Three
+- The plot shows us what's the contribution preference of people with different occupation.
+- Most people have overwelming preference of the Democrat over the Republic, both by contribution count and total amount.
+- However, there are a few interesting exceptions that the Repulican wins competive portion financial contribution from those who are homemaker, retired, CEO, sales, and lawer. More data about the contributers is needed for further intepretation of this difference.
 
 ------
 
 ## Reflection
+### Conclusion
+- In this project, we will explore the financial contributions to 2016 US Presidential candidates of California (CA).
 
+1. We start with collecting the data for contributions and addition data for background information of counties in CA.
+2. Then the data is audited, cleaned, and most importantly, joined and merged into dataframes for later exploration, including `contributions`, `votes`, and so on.
+3. We first investigate univariate cases to gain a deeper understanding of the data. After that we continue with bivariate and multivariate analysis, focusing on questions of the campaign process of each candidate/party, and its relationship with average family incoming and occupations, as well as its relationship with the final election votes of each county.
 
+### Challenges
 
+1. The main challenge is the data wrangling process, R used different methods and utilities to wrangle data. It could be inflexible and a little painful as my preious experience is mainly in Python.
+2. The challenges for EDA process are designing questions and strategy, and collecting source data. They will decide the goal, process and quality of the analysis to a great extent. For example, with the help the contributions, counties, and votes data, we are enable to explore the inner relationship between the voters' background, their contributions and election results.
 
-### Source
-- [Heat map](http://stackoverflow.com/questions/1260965/developing-geographic-thematic-maps-with-r)
+### Future work
+
+1. The analysis could be extended to the scale of the national campaign instead of a single state, it will give us a complete view of the campaign for each candidate/party.
+2. As we the election has ended and votes data is available. We can also get the popularity suvey result across the campaign and election. With them we may be able to find stronger connections between campaign, popularity, and election result.
+3. Similarly, we can combine detailed background information of each county, such as eduction level, economics statistics, historical data on elections, etc.
+
+## Reference
+### Data Source
+- [Data Set Options](https://docs.google.com/document/d/1qEcwltBMlRYZT-l699-71TzInWfk4W9q5rTCSvDVMpc/pub?embedded=true)
+- [Financial Contributions to Presidential Campaigns by State](http://fec.gov/disclosurep/pnational.do)
+- [Wikipedia](https://en.wikipedia.org/wiki/Republican_Party_presidential_candidates,_2016)
 - [2016 CA election results from NYTimes](http://www.nytimes.com/elections/results/california)
 - [2014 CA income data from US Cencus](http://factfinder.census.gov/bkmk/table/1.0/en/ACS/14_5YR/GCT1902.ST05/0400000US06)
+
+### Others
 - [R Markdown](https://raw.githubusercontent.com/winkelman/udacity-dand-eda/master/project.Rmd)
+- [Heat map](http://stackoverflow.com/questions/1260965/developing-geographic-thematic-maps-with-r)
