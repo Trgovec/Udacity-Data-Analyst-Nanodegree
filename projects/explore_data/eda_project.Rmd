@@ -464,7 +464,8 @@ ggplot(aes(x = reorder(county, -n), y = n), data = contributions.by_county) +
   xlab('county') + 
   ylab('count') +
   ggtitle('contribution count by county') +
-  theme(axis.text.x = element_text(size=10, angle = 90, hjust = 1))
+  theme(axis.text.y = element_text(hjust = 1)) +
+  coord_flip()
 ```
 
 - they are also among the counties with top 10 population
@@ -473,7 +474,8 @@ ggplot(aes(x=reorder(county, -population), y=population), data=votes) +
   geom_bar(stat='identity') +
   xlab('county') + 
   ggtitle('population by county') +
-  theme(axis.text.x = element_text(size=10, angle = 90, hjust = 1))
+  theme(axis.text.y = element_text(hjust = 1)) +
+  coord_flip()
 ```
 
 #### Contribution count by candidate
@@ -486,7 +488,7 @@ contributions.by_candidate <- left_join(contributions.by_candidate,
                                         candidates, by='candidate')
 ```
 
-- Republicians received most contributions in CA, more than four times larger than the total of others.
+- The Democrat receives most counts of contributions in CA, more than four times of the total of others.
 ```{r contribution count by candidate and party}
 p1 <- ggplot(aes(x = reorder(candidate, -n), y = n), 
              data = contributions.by_candidate) +
@@ -664,27 +666,23 @@ ggplot(data=contributions.by_county,
 ### Bivariate Analysis
 
 #### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
-As studied in previous plots part, there are mainly two patterns.
-
-1. There's a positive correlation between contribution preference and voting preference.
-2. Generally, people with higher average family income will tend to vote for Clinton (the Democrat), those with lower average family income will tend to vote for Trump (the Republican).
+- There's a positive correlation between contribution preference and voting preference.
+- Namely, Democrat contributers tend to vote for Clinton, Republican supporters for Trump.
 
 #### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
 - The other parties or candidates have overall little influence in the campaign.
 - The Democats and Republicans almost start the campaign at the same time, yet Democats manage to rush all the way until near election.
-- Republican's final candidate Trump didn't get much contribution, on the contrary, he could the cause of the falt zone of Republican's campaign starting from April 2016.
+- Republican's final candidate Trump didn't get much contribution, on the contrary, he could the cause of the slow down of Republican's campaign starting from April 2016.
 
 #### What was the strongest relationship you found?
-- There's positive correlation between average contribution preference and voting preference.
-- Namely, Democrat contributers tend to vote for Clinton, Republican supporters for Trump.
-
+- The positive correlation between average contribution preference and voting preference.
 
 
 ## Multivariate Plots Section
 In this section, we will focus on study of final candidates Hillary and Trump, or the Democrat and Republican.
 
 ### Which candidates/party got the most of the campaign?
-- The plot confirms that Republicians receive most contributions in CA.
+- The plot confirms that the Deomocrat receives most contributions in CA.
 - The ratio between two final candidates Clinton and Trump is more than 10 times.
 
 ```{r contribution sum by candidate of each candidate}
@@ -831,8 +829,8 @@ p2 <- ggplot(melt(as.data.frame(contributions.by_occupation[c(1:20),c('occupatio
 ### Multivariate Analysis
 
 #### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
-1. For the financial campaign in CA, the Republican received more contributions than the Democrat, either by candidates, by party, or by time.
-2. The Democrat supporters tend to donate more money than the Republic Supporters, 
+1. For the financial campaign in CA, the Democrat receives more contributions than the Republican, either by candidates, by party, or by time.
+2. The Democrat supporters tend to donate more money than the Republic supporters.
 3. Most people have strong preference of the Democrat over the Republic, with the exception of those who are `homemaker, retired, enginner, sales, ceo, and self-employed`.
 4. Most people have preference of the Democrat over the Republic, while the Repulican wins competive portion financial contribution from those who are homemaker, retired, CEO, sales, and lawer.
 
@@ -864,7 +862,7 @@ grid.arrange(p1, p2, ncol=1)
 
 ### Description One
 - The plot shows us which candidates receive the most contributions by count from of the campaign.
-- The Republicians received most contributions in CA, Republican comes at the second, other parties have little share.
+- The Democrat receives most contributions in CA, the Republican comes at the second, other parties have little share.
 - The ratio of contribution amount received between the final candidates Clinton and Trump is about 10 times.
 
 ### Plot Two
@@ -876,14 +874,14 @@ ggplot(data=contributions.by_county,
     geom_point(shape=1) +
     # Add linear regression line of 95% confidence region
     geom_smooth(method=lm) +
-  xlab('difference in contribution count Democrat - Republican') +
-  ylab('difference in votes Clinton - Trump') +
+  xlab('normalized difference in contribution count Democrat - Republican') +
+  ylab('normalized difference in votes Clinton - Trump') +
   ggtitle('vote preference vs contribution preference by county')
 ```
 
 ### Description Two
 - The plot shows positive correlation between contribution preference and voting preference.
-- Generally, people with higher average family income will tend to vote for Clinton (the Democrat), those with lower average family income will tend to vote for Trump (the Republican).
+- Namely, Democrat contributers tend to vote for Clinton, and Republican supporters for Trump.
 
 ### Plot Three
 - contribution among top occupations of different party
